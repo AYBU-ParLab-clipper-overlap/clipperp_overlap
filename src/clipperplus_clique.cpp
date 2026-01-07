@@ -91,7 +91,7 @@ namespace clipperplus
                     else
                     {
                         status = METIS_PartGraphKway(&num_vertices, &ncon, xadj.data(), adjncy.data(),
-                            vwgt.data(), nullptr, nullptr, &num_parts,
+                            nullptr, nullptr, nullptr, &num_parts,
                             nullptr, nullptr, options, &objval, partition.data());
                     }
                     std::cout << "==Metis objVal: " << objval << "\n";
