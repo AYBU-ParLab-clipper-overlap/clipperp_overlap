@@ -1,0 +1,103 @@
+cmake_minimum_required(VERSION 3.10)
+project(clipperplus VERSION 1.0.0)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Default build type
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+endif()
+
+############################################################
+# Dependencies
+############################################################
+
+# --- EIGEN ---
+find_package(Eigen3 REQUIRED)
+message(STATUS "Eigen version: ${EIGEN3_VERSION_STRING}")
+
+# --- OpenMP ---
+set(OpenMP_C_FLAGS "-fopenmp")
+set(OpenMP_CXX_FLAGS "-fopenmp")
+find_package(OpenMP REQUIRED)
+
+# --- MPI ---
+find_package(MPI REQUIRED)
+
+############################################################
+# METIS & GKLIB (AFR-UIL paths)
+############################################################
+
+set(METIS_DIR "/arf/home/esalman/libraries/metis-install/")
+set(GKLIB_DIR "/arf/home/esalman/libraries/gklib-install")
+
+# METIS
+find_library(METIS_LIB metis PATHS ${METIS_DIR}/lib)
+find_path(METIS_INCLUDE_DIR metis.h PATHS ${METIS_DIR}/include)
+
+# GKlib
+find_library(GKLIB_LIB GKlib PATHS ${GKLIB_DIR}/lib)
+find_path(GKLIB_INCLUDE_DIR gk_types.h PATHS ${GKLIB_DIR}/include)
+
+include_directories(${METIS_INCLUDE_DIR})
+include_directories(${GKLIB_INCLUDE_DIR})
+
+message(STATUS "METIS: ${METIS_LIB}")
+message(STATUS "GKlib: ${GKLIB_LIB}")
+
+############################################################
+# ClippeR+ Source Files
+############################################################
+
+set(CLIPPERPLUS_SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/clipperplus_clique.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/clipperplus_graph.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/clique_optimization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/clipperplus_heuristic.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils.cpp
+)
+
+############################################################
+# Shared Library: libclipperplus.so
+############################################################
+
+add_library(clipperplus SHARED ${CLIPPERPLUS_SRC})
+
+target_include_directories(clipperplus PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(clipperplus PUBLIC
+    Eigen3::Eigen
+    OpenMP::OpenMP_CXX
+    MPI::MPI_CXX
+    ${METIS_LIB}
+    ${GKLIB_LIB}
+)
+
+set_target_properties(clipperplus PROPERTIES VERSION ${PROJECT_VERSION})
+
+############################################################
+# Executable: demo_clipper
+############################################################
+
+add_executable(demo_clipper
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/demo_clipper.cpp
+)
+
+target_include_directories(demo_clipper PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(demo_clipper PRIVATE
+    clipperplus
+    Eigen3::Eigen
+    OpenMP::OpenMP_CXX
+    MPI::MPI_CXX
+    ${METIS_LIB}
+    ${GKLIB_LIB}
+)
+
+message(STATUS "Config completed OK.")
