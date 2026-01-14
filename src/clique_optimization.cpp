@@ -142,6 +142,7 @@ namespace clipperplus
                 if (alpha < params.minalpha)
                 { // alpha decreased too much
                     alpha = params.minalpha;
+		    break;
 #ifdef DEBUG_OPTIM
                     std::cout << "lower bounded alpha to min threshold" << std::endl;
 #endif
@@ -215,6 +216,8 @@ namespace clipperplus
         const double umax = u.maxCoeff();
         const double mid_thresh = 0.5 * (umin + umax);              // midpoint in [umin, umax]
         const double rounding_thresh = std::max(params.eps, mid_thresh);
+
+	std::cout << " EPS **** " << params.eps << " mid: " << mid_thresh << std::endl; 
 
 #ifdef DEBUG_OPTIM
         std::cout << "clipper: rounding_thresh: " << rounding_thresh << std::endl;
