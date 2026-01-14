@@ -187,7 +187,7 @@ int main(int argc, char* argv[]) {
 
     if (rank == 0)  
     {
-        std::cout<< "clique finding took " << end-start << " seconds" << std::endl; 
+        std::cout<< "Clique finding took " << end-start << " seconds" << std::endl; 
         std::vector<int> clique = result.first;
         clipperplus::CERTIFICATE cert = result.second;
 

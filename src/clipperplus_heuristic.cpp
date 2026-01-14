@@ -1,5 +1,5 @@
 #include <set>
-
+#include <cassert>
 #include "clipperplus/utils.h"
 #include "clipperplus/clipperplus_heuristic.h"
 

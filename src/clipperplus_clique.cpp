@@ -35,6 +35,9 @@ namespace clipperplus
         std::vector<idx_t> xadj(num_vertices + 1, 0);
         std::vector<idx_t> adjncy;
 
+        double time_s = MPI_Wtime();  //Timer
+        double time_p, time_m, time_1, time2;
+
         // rank 0 partitions the graph
         if (rank == 0) {
             std::cout << "GRAPH SIZE : " << num_vertices << std::endl;
@@ -47,6 +50,9 @@ namespace clipperplus
                 xadj[i + 1] = xadj[i] + vwgt[i];
                 adjncy.insert(adjncy.end(), neighbors.begin(), neighbors.end());
             }
+            time_p = MPI_Wtime() - time_s;
+            std::cout << "Rank: " << rank << " | Time of Preprocesing for METIS : " << time_p << " s" << std::endl;
+
             switch (partitioning_mode)
             {
 
@@ -105,6 +111,8 @@ namespace clipperplus
                     break;
             }
         }
+        time_m = MPI_Wtime() - time_s;
+        std::cout << "Rank: " << rank << " | Time of Partitioning : " << time_m << " s" << std::endl;
 
         // Broadcast partition to all processes . no need to send csr
         MPI_Bcast(partition.data(), num_vertices, MPI_INT, 0, MPI_COMM_WORLD);
@@ -117,6 +125,8 @@ namespace clipperplus
             }
         }
 
+        double s1 = MPI_Wtime(); // std::chrono::high_resolution_clock::now();
+        
         if ((enable_overlap == true) && (overlap_ratio > 0))
         {
             switch (overlap_mode)
@@ -161,7 +171,6 @@ namespace clipperplus
                     // Set to store candidate overlap nodes:
                     // i.e., neighbors of local nodes that belong to other partitions
                     std::unordered_set<Node> candidate_overlap;
-                    auto s1 = MPI_Wtime(); // std::chrono::high_resolution_clock::now();
                     for (Node v : local_nodes) {
                         for (Node n : graph.neighbors(v)) {
                             if (partition[n] != rank) {
@@ -210,23 +219,32 @@ namespace clipperplus
                     elapsed = e3 - s3;
                     std::cout << "Rank: " << rank << " | Selection of nodes by overlap ratio: " << elapsed << " s" << std::endl;
 
-
-                    auto e4 = MPI_Wtime(); // std::chrono::high_resolution_clock::now();
-                    elapsed = e4 - s1;
-                    std::cout << "Rank: " << rank << " | END OF OVERLAPPING: " << elapsed << " s" << std::endl;
                 }
                     break;
                 default:
                     break;
             }
         }
-        Graph local_graph = graph.induced(local_nodes);
+        auto e4 = MPI_Wtime(); // std::chrono::high_resolution_clock::now();
+        elapsed = e4 - s1;
+        std::cout << "Rank: " << rank << " | END OF OVERLAPPING: " << elapsed << " s" << std::endl;
 
-        auto local_result = find_clique(local_graph);
+
+        Graph local_graph = graph.induced(local_nodes);
+        double time_loc_g = MPI_Wtime() - e4;
+        
+        double time_find_c1 = MPI_Wtime();
+        auto local_result = find_clique(local_graph); // FIND CLIQUE
+        time_find_c1 = MPI_Wtime() - time_find_c1;
+
+        std::cout << "Rank: " << rank << " | Local find clique time: " << time_find_c1 << " s" << std::endl;
+        std::cout << "Rank: " << rank << " | Induced Graph time: "<< time_loc_g << " s" << std::endl;
+
         int local_clique_size = local_result.first.size();
 
         std::cout << "Rank: " << rank << " | Local nodes: " << local_nodes.size() << " | Overlap nodes: " << top_nodes << " | Local clique size: " << local_clique_size << std::endl;
 
+        double time_comm = MPI_Wtime();
         int best_size;
         MPI_Allreduce(&local_clique_size, &best_size, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
 
@@ -260,6 +278,10 @@ namespace clipperplus
                 MPI_Send(local_result.first.data(), local_clique_size, MPI_INT, 0, 0, MPI_COMM_WORLD);
             }
         }
+
+        time_comm = MPI_Wtime() - time_comm;
+        std::cout << "Rank: " << rank << " | Parallel Clique time: " << MPI_Wtime()-time_s << " s" << std::endl;
+
 
         int best_cert;
         if (rank == 0) {

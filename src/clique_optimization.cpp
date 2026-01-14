@@ -20,11 +20,15 @@ namespace clipperplus
         // Initialization
         const size_t n = _M.cols();
         const Eigen::MatrixXd C = _M;
+	// std::cout << "top-left 10x10:\n" << _M.topLeftCorner(10,10) << "\n";
+	
+	// [CHANGE] Ensure symmetry if needed (optional but safe)
 
         // Zero out any entry corresponding to an active constraint
         const Eigen::MatrixXd M = _M.cwiseProduct(C);
 
         // Binary complement of constraint matrix
+//	Eigen::MatrixXd Cb = Eigen::MatrixXd::Zero(n,n); // if no constraints
         const Eigen::MatrixXd Cb = Eigen::MatrixXd::Ones(n, n) - C;
 
         // one step of power method to have a good scaling of u
@@ -56,13 +60,15 @@ namespace clipperplus
 #endif
 #ifdef DEBUG_OPTIM
         std::cout << "clipper: u0: ";
-        for (int ii = 0; ii < u0.size(); ++ii)
+        //for (int ii = 0; ii < u0.size(); ++ii)
+        for (int ii = 0; ii < 10; ++ii)
         {
             std::cout << u0(ii) << " ";
         }
         std::cout << std::endl;
         std::cout << "clipper: u: ";
-        for (int ii = 0; ii < u.size(); ++ii)
+        //for (int ii = 0; ii < u.size(); ++ii)
+        for (int ii = 0; ii < 10; ++ii)
         {
             std::cout << u(ii) << " ";
         }
@@ -156,7 +162,7 @@ namespace clipperplus
                 gradF = gradFnew;
 
                 // check if desired accuracy has been reached by gradient ascent
-                if (deltau < params.tol_u || std::abs(deltaF) < params.tol_F)
+               if (deltau < params.tol_u || std::abs(deltaF) < params.tol_F)
                     break;
                 jsum++;
             } // innerloop
@@ -185,14 +191,15 @@ namespace clipperplus
         dur = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2);
         elaps = static_cast<double>(dur.count()) / 1e6;
         std::cout << "clipper time: optimization: " << elaps << std::endl;
-        std::cout << "d: " << d << std::endl;
-        std::cout << "ksum: " << ksum << std::endl;
-        std::cout << "jsum: " << jsum << std::endl;
-        std::cout << "i: " << i << std::endl;
+        std::cout << "d: " << d << "  active constraints " << std::endl;
+        std::cout << "ksum: " << ksum << " params.maxlsiters: " <<  params.maxlsiters << std::endl;
+        std::cout << "jsum: " << jsum << " params.maxiniters: " << params.maxiniters << std::endl;
+        std::cout << "iteration: " << i << " params.maxoliters " << params.maxoliters << std::endl;
 #endif
 #ifdef DEBUG_OPTIM
         std::cout << "clipper: u final: ";
-        for (int ii = 0; ii < u.size(); ++ii)
+        //for (int ii = 0; ii < u.size(); ++ii)
+        for (int ii = 0; ii < 10 ; ++ii)
         {
             std::cout << u(ii) << " ";
         }
@@ -203,7 +210,12 @@ namespace clipperplus
         std::vector<long> nodes; // node indices of rounded u vector
 
         // pick a rounding threshold between min and max element
-        const double rounding_thresh = params.eps;
+ //       const double rounding_thresh = params.eps;
+	const double umin = u.minCoeff();
+        const double umax = u.maxCoeff();
+        const double mid_thresh = 0.5 * (umin + umax);              // midpoint in [umin, umax]
+        const double rounding_thresh = std::max(params.eps, mid_thresh);
+
 #ifdef DEBUG_OPTIM
         std::cout << "clipper: rounding_thresh: " << rounding_thresh << std::endl;
 #endif
@@ -228,6 +240,47 @@ namespace clipperplus
         const auto t_end = std::chrono::high_resolution_clock::now();
         const auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(t_end - t_start);
         const double elapsed = static_cast<double>(duration.count()) / 1e6;
+
+	//  Repair: enforce clique property in _M by pruning violators
+        auto is_edge = [&](long a, long b) -> bool {
+              return (a == b) || (_M(a, b) > 0.5);
+        };
+
+        bool changed = true;
+        while (changed && nodes.size() > 1) {
+          changed = false;
+
+          std::vector<int> viol(nodes.size(), 0);
+          for (size_t ii = 0; ii < nodes.size(); ++ii) {
+             for (size_t jj = ii + 1; jj < nodes.size(); ++jj) {
+                 if (!is_edge(nodes[ii], nodes[jj]) || !is_edge(nodes[jj], nodes[ii])) {
+                  viol[ii]++; viol[jj]++;
+                  }
+             }
+           }
+
+          int maxv = 0; size_t worst = 0;
+          for (size_t ii = 0; ii < viol.size(); ++ii) {
+              if (viol[ii] > maxv) { maxv = viol[ii]; worst = ii; }
+          }
+
+          if (maxv > 0) {
+            nodes.erase(nodes.begin() + static_cast<long>(worst));
+            changed = true;
+           }
+        }
+
+        //std::cout << "symErr=" << (_M - _M.transpose()).cwiseAbs().maxCoeff() << "\n";
+
+	// Clique-check violations
+	size_t bad = 0;
+        for (size_t ii=0; ii<nodes.size(); ++ii)
+            for (size_t jj=ii+1; jj<nodes.size(); ++jj)
+                if (_M(nodes[ii], nodes[jj]) < 0.5 || _M(nodes[jj], nodes[ii]) < 0.5)
+                     bad++;
+
+         std::cout << "*** nodes size=" << nodes.size() << " Clique-check violation, bad_pairs=" << bad << "\n";
+
 
         return nodes;
     }
